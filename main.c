@@ -8,11 +8,6 @@ struct queue_element {
     unsigned long cost;
 };
 
-struct result_element {
-    unsigned long previous;
-    unsigned long long cost;
-};
-
 struct {
     int id;
     unsigned long graph_size;
@@ -21,7 +16,7 @@ struct {
     struct queue_element **queue;
     unsigned long queue_size;
     unsigned long *queue_position;
-    struct result_element **result;
+    unsigned long long *result;
 } dijkstra = {.id = 0,
               .adj_matrix = NULL,
               .length = 0};
@@ -30,7 +25,7 @@ struct {
     unsigned long long min;
     unsigned long long max;
     unsigned long size;
-} ranking = {.size = 0};
+} ranking;
 
 // -----------   QUEUE METHODS   -----------
 
@@ -47,7 +42,7 @@ unsigned long queue_right(unsigned long index) {
 }
 
 struct queue_element * new_queue_element(unsigned long node, unsigned long previous, unsigned long cost) {
-    struct queue_element *temp = (struct queue_element *)malloc(sizeof(struct queue_element));
+    struct queue_element *temp = (struct queue_element *) malloc(sizeof(struct queue_element));
     temp->node = node;
     temp->previous = previous;
     temp->cost = cost;
@@ -62,21 +57,31 @@ void queue_swap(unsigned long a, unsigned long b) {
     dijkstra.queue_position[dijkstra.queue[b]->node] = b;
 }
 
-void queue_add(struct queue_element *queue_element) {
-    dijkstra.queue[dijkstra.queue_size] = queue_element;
-    dijkstra.queue_position[queue_element->node] = dijkstra.queue_size;
-    dijkstra.queue_size++;
+void queue_decrease(unsigned long index, unsigned long new_value) {
+    dijkstra.queue[index]->cost = new_value;
+    while (index != 0 && dijkstra.queue[queue_parent(index)]->cost > dijkstra.queue[index]->cost) {
+        queue_swap(queue_parent(index), index);
+        index = queue_parent(index);
+    }
 }
 
+//void queue_add(struct queue_element *queue_element) {
+//    dijkstra.queue[dijkstra.queue_size] = queue_element;
+//    dijkstra.queue_position[queue_element->node] = dijkstra.queue_size;
+//    dijkstra.queue_size++;
+//}
+
 void queue_insert(struct queue_element *queue_element) {
-    if (dijkstra.queue_size == dijkstra.graph_size) {
-        printf("ERROR: QUEUE FULL");
+    if (dijkstra.queue_size != 0 && (dijkstra.queue_position[queue_element->node] != 0 || dijkstra.queue[0]->node == queue_element->node)) {
+        if (queue_element->cost < dijkstra.queue[dijkstra.queue_position[queue_element->node]]->cost)
+            queue_decrease(dijkstra.queue_position[queue_element->node], queue_element->cost);
         return;
     }
 
     dijkstra.queue_size++;
     unsigned long index = dijkstra.queue_size - 1;
     dijkstra.queue[index] = queue_element;
+    dijkstra.queue_position[queue_element->node] = index;
 
     while (index != 0 && dijkstra.queue[index]->cost < dijkstra.queue[queue_parent(index)]->cost) {
         queue_swap(index, queue_parent(index));
@@ -98,51 +103,44 @@ void queue_heapify(unsigned long index) {
     }
 }
 
-void queue_make_heap() {
-    unsigned long start = dijkstra.queue_size / 2;
-    while (1) {
-        queue_heapify(start);
-        if (start == 0)
-            break;
-        start--;
-    }
-}
+//void queue_make_heap() {
+//    unsigned long start = dijkstra.queue_size / 2;
+//    while (1) {
+//        queue_heapify(start);
+//        if (start == 0)
+//            break;
+//        start--;
+//    }
+//}
 
-void queue_decrease(unsigned long index, unsigned long new_value) {
-    dijkstra.queue[index]->cost = new_value;
-    while (index != 0 && dijkstra.queue[queue_parent(index)]->cost > dijkstra.queue[index]->cost) {
-        queue_swap(index, queue_parent(index));
-        index = queue_parent(index);
-    }
-}
+//struct queue_element * queue_root() {
+//    return dijkstra.queue[0];
+//}
 
-struct queue_element * queue_root() {
-    return dijkstra.queue[0];
-}
-
-void queue_delete_root() {
+struct queue_element * queue_extract_root() {
     if (dijkstra.queue_size == 0) {
         printf("ERROR: QUEUE IS EMPTY");
-        return;
+        return NULL;
     }
 
     struct queue_element *temp = dijkstra.queue[0];
-    free(temp);
 
     if (dijkstra.queue_size == 1) {
         dijkstra.queue_size--;
-        return;
+        return temp;
     }
 
     dijkstra.queue[0] = dijkstra.queue[dijkstra.queue_size - 1];
+    dijkstra.queue_position[dijkstra.queue[dijkstra.queue_size - 1]->node] = 0;
     dijkstra.queue_size--;
     queue_heapify(0);
+    return temp;
 }
 
 void queue_scan_row(unsigned long row) {
     for (int i = 1; i < dijkstra.graph_size; i++)
         if (*(dijkstra.adj_matrix + sizeof(unsigned long) * i) != 0 && i != row)
-            queue_insert(new_queue_element(i, row, *(dijkstra.adj_matrix + sizeof(unsigned long) * i) + dijkstra.result[i]->cost));
+            queue_insert(new_queue_element(i, row, *(dijkstra.adj_matrix + sizeof(unsigned long) * i) + dijkstra.result[i]));
 }
 
 // -----------   PRINTERS   -----------
@@ -150,8 +148,9 @@ void queue_scan_row(unsigned long row) {
 void queue_print() {
     for (unsigned long i = 0; i < dijkstra.queue_size; i++)
         printf("node: %lu previous: %lu cost: %lu\n", dijkstra.queue[i]->node, dijkstra.queue[i]->previous, dijkstra.queue[i]->cost);
-    for (unsigned long i = 1; i <= dijkstra.queue_size; i++)
-        printf("%lu: %lu\n", i, dijkstra.queue_position[i]);
+//    for (unsigned long i = 1; i <= dijkstra.queue_size; i++)
+//        printf("%lu: %lu\n", i, dijkstra.queue_position[i]);
+    printf("\n");
 }
 
 void print_matrix() {
@@ -163,25 +162,24 @@ void print_matrix() {
     }
 }
 
+void print_result() {
+    for (unsigned long i = 1; i < dijkstra.graph_size; i++)
+        printf("%lu:%llu ", i, dijkstra.result[i]);
+    printf("\n");
+}
+
 // -----------   OTHERS   -----------
 
 void result_reset() {
-    for (int i = 0; i < dijkstra.graph_size; i++) {
-        dijkstra.result[i]->cost = 0;
-        dijkstra.result[i]->previous = 0;
-    }
+    for (int i = 1; i < dijkstra.graph_size; i++)
+        dijkstra.result[i] = 0;
 }
 
 void setup() {
     dijkstra.adj_matrix = (unsigned long *) malloc(dijkstra.graph_size * dijkstra.graph_size * sizeof(unsigned long));
     dijkstra.queue = (struct queue_element **) malloc(dijkstra.graph_size * sizeof(struct queue_element *));
-    dijkstra.queue_position = (unsigned long *) malloc(sizeof(unsigned long) * dijkstra.graph_size);
-    dijkstra.result = (struct result_element **) calloc(sizeof(struct result_element *) * dijkstra.graph_size, 0);
-    for (int i = 0; i < dijkstra.graph_size; i++) {
-        dijkstra.result[i] = (struct result_element *) malloc(sizeof(struct result_element));
-        dijkstra.result[i]->cost = 0;
-        dijkstra.result[i]->previous = 0;
-    }
+    dijkstra.queue_position = (unsigned long *) calloc(dijkstra.graph_size, sizeof(unsigned long));
+    dijkstra.result = (unsigned long long *) calloc(dijkstra.graph_size, sizeof(unsigned long long));
 }
 
 // -----------   PARSERS AND MAIN   -----------
@@ -205,16 +203,15 @@ void compute_dijkstra() {
     dijkstra.queue_size = 0;
     for (int i = 1; i < dijkstra.graph_size; i++)
         if (*(dijkstra.adj_matrix + sizeof(unsigned long) * i) != 0)
-            queue_add(new_queue_element(i, 0, *(dijkstra.adj_matrix + sizeof(unsigned long) * i)));
-    queue_make_heap();
+            queue_insert(new_queue_element(i, 0, *(dijkstra.adj_matrix + sizeof(unsigned long) * i)));
 
     while (dijkstra.queue_size != 0) {
-        struct queue_element *root = queue_root();
-        if (root->cost < dijkstra.result[root->node]->cost || dijkstra.result[root->node]->cost == 0) {
-            dijkstra.result[root->node]->cost = root->cost;
-            dijkstra.result[root->node]->previous = root->previous;
-            queue_delete_root();
+        queue_print();
+        struct queue_element *root = queue_extract_root();
+        if (dijkstra.result[root->node] == 0 || root->cost < dijkstra.result[root->node]) {
+            dijkstra.result[root->node] = root->cost;
             queue_scan_row(root->node);
+            free(root);
         }
     }
 }
@@ -227,11 +224,11 @@ void parse_command() {
     if (!strcmp(input, "AggiungiGrafo")) {
         parse_matrix();
         compute_dijkstra();
-        queue_print();
+        print_result();
         //add to ranking
         result_reset();
+        dijkstra.id++;
     } else if (!strcmp(input, "TopK")) {
-        print_matrix();
         //print ranking
     }
 }
