@@ -8,24 +8,38 @@ struct queue_element {
     unsigned long cost;
 };
 
+struct stack_node {
+    unsigned long graph_id;
+    struct stack_node *next;
+};
+
+struct tree_node {
+    unsigned long long length;
+    struct tree_node *left;
+    struct tree_node *right;
+    struct stack_node *stack;
+};
+
 struct {
-    int id;
+    unsigned long id;
     unsigned long graph_size;
     unsigned long *adj_matrix;
-    unsigned long long length;
-    struct queue_element **queue;
     unsigned long queue_size;
+    struct queue_element **queue;
     unsigned long *queue_position;
     unsigned long long *result;
+    unsigned long long length;
 } dijkstra = {.id = 0,
-              .adj_matrix = NULL,
               .length = 0};
 
 struct {
-    unsigned long long min;
     unsigned long long max;
     unsigned long size;
-} ranking;
+    unsigned long size_curr;
+    struct tree_node *ranking;
+} ranking = {.max = 0,
+             .size_curr = 0,
+             .ranking = NULL};
 
 // -----------   QUEUE METHODS   -----------
 
@@ -124,13 +138,90 @@ void queue_scan_row(unsigned long row) {
             queue_insert(new_queue_element(i, row, *(dijkstra.adj_matrix + row * dijkstra.graph_size + i) + dijkstra.result[row]));
 }
 
+// -----------   STACK   -----------
+
+void push (struct stack_node **stack, unsigned long graph_id) {
+    struct stack_node *temp = (struct stack_node *) malloc(sizeof(struct stack_node));
+    temp->graph_id = graph_id;
+    temp->next = *stack;
+    *stack = temp;
+}
+
+void pop(struct stack_node **stack) {
+    if (*stack == NULL)
+        return;
+
+    struct stack_node *temp = *stack;
+    *stack = (*stack)->next;
+    free(temp);
+}
+
+// -----------   TREE   -----------
+
+struct tree_node * new_tree_node(unsigned long id, unsigned long long length) {
+    struct tree_node *temp = (struct tree_node *) malloc(sizeof(struct tree_node));
+    temp->length = length;
+    temp->left = NULL;
+    temp->right = NULL;
+    temp->stack = NULL;
+    push(&temp->stack, id);
+    return temp;
+}
+
+struct tree_node * search(struct tree_node **tree, unsigned long long length) {
+    if ((*tree) == NULL)
+        return NULL;
+    if ((*tree)->length == length)
+        return *tree;
+    return (*tree)->length > length ? search(&(*tree)->left, length) : search(&(*tree)->right, length);
+}
+
+unsigned long long max(struct tree_node **tree) {
+    if (*tree == NULL)
+        return 0;
+    if ((*tree)->right == NULL)
+        return (*tree)->length;
+    else return max(&(*tree)->right);
+}
+
+void remove_max(struct tree_node **tree) {
+    if (*tree == NULL)
+        return;
+    if ((*tree)->right == NULL) {
+        pop(&(*tree)->stack);
+        if ((*tree)->stack == NULL)
+            *tree = (*tree)->left;
+    } else remove_max(&(*tree)->right);
+}
+
+unsigned long long get_max(struct tree_node *tree) {
+    if (tree == NULL)
+        return 0;
+    if (tree->right == NULL)
+        return tree->length;
+    else return get_max(tree->right);
+}
+
+void insert(struct tree_node **tree, unsigned long id, unsigned long long length) {
+    if (*tree == NULL) {
+        *tree = new_tree_node(id, length);
+        return;
+    }
+
+    if ((*tree)->length > length)
+        insert(&(*tree)->left, id, length);
+    else if ((*tree)->length < length)
+        insert(&(*tree)->right, id, length);
+    else push(&(*tree)->stack, id);
+}
+
 // -----------   PRINTERS   -----------
 
 void queue_print() {
     for (unsigned long i = 0; i < dijkstra.queue_size; i++)
         printf("node: %lu previous: %lu cost: %lu\n", dijkstra.queue[i]->node, dijkstra.queue[i]->previous, dijkstra.queue[i]->cost);
-//    for (unsigned long i = 1; i <= dijkstra.queue_size; i++)
-//        printf("%lu: %lu\n", i, dijkstra.queue_position[i]);
+    for (unsigned long i = 1; i <= dijkstra.queue_size; i++)
+        printf("%lu: %lu\n", i, dijkstra.queue_position[i]);
     printf("\n");
 }
 
@@ -144,9 +235,25 @@ void print_matrix() {
 }
 
 void print_result() {
+    setbuf(stdout, 0);
+    printf("%lu: ", dijkstra.id);
     for (unsigned long i = 1; i < dijkstra.graph_size; i++)
         printf("%lu:%llu ", i, dijkstra.result[i]);
-    printf("\n");
+}
+
+void print_stack(struct stack_node *stack) {
+    if (stack != NULL) {
+        printf("%lu ", stack->graph_id);
+        print_stack(stack->next);
+    }
+}
+
+void print_ranking(struct tree_node *tree) {
+    if (tree != NULL) {
+        print_stack(tree->stack);
+        print_ranking(tree->left);
+        print_ranking(tree->right);
+    }
 }
 
 // -----------   OTHERS   -----------
@@ -154,6 +261,8 @@ void print_result() {
 void result_reset() {
     for (int i = 1; i < dijkstra.graph_size; i++)
         dijkstra.result[i] = 0;
+    dijkstra.length = 0;
+    dijkstra.id++;
 }
 
 void setup() {
@@ -163,20 +272,35 @@ void setup() {
     dijkstra.result = (unsigned long long *) calloc(dijkstra.graph_size, sizeof(unsigned long long));
 }
 
-// -----------   PARSERS AND MAIN   -----------
-
 void parse_dimensions() {
-    fscanf(stdin, "%lu", &dijkstra.graph_size);
-    fscanf(stdin, "%lu\n", &ranking.size);
+    if (!fscanf(stdin, "%lu", &dijkstra.graph_size))
+        printf("error1");
+    if (!fscanf(stdin, "%lu\n", &ranking.size))
+        printf("error2");
     setup();
 }
 
 void parse_matrix() {
     for (int i = 0; i < dijkstra.graph_size; i++) {
         for (int j = 0; j < dijkstra.graph_size; j++) {
-            fscanf(stdin, "%lu,", dijkstra.adj_matrix + dijkstra.graph_size * i + j);
+            if(!fscanf(stdin, "%lu,", dijkstra.adj_matrix + dijkstra.graph_size * i + j))
+                printf("error3");
         }
-        fgets(NULL, 1, stdin);
+        if(getchar() != '\n')
+            printf("error4");
+    }
+}
+
+void add_result() {
+    if (ranking.size_curr < ranking.size) {
+        insert(&ranking.ranking, dijkstra.id, dijkstra.length);
+        ranking.size_curr++;
+        if (dijkstra.length > ranking.max)
+            ranking.max = dijkstra.length;
+    } else if (dijkstra.length < ranking.max) {
+        remove_max(&ranking.ranking);
+        insert(&ranking.ranking, dijkstra.id, dijkstra.length);
+        ranking.max = get_max(ranking.ranking);
     }
 }
 
@@ -185,7 +309,6 @@ void compute_dijkstra() {
     queue_scan_row(0);
 
     while (dijkstra.queue_size != 0) {
-        //queue_print();
         struct queue_element *root = queue_extract_root();
         if (dijkstra.result[root->node] == 0 || root->cost < dijkstra.result[root->node]) {
             dijkstra.result[root->node] = root->cost;
@@ -193,29 +316,33 @@ void compute_dijkstra() {
         }
         free(root);
     }
+    for (int i = 1; i < dijkstra.graph_size; i++) {
+        dijkstra.length += dijkstra.result[i];
+    }
 }
 
-void parse_command() {
+int parse_command() {
     char input[15];
-    //memset(input, 0, 14);
-    fgets(input, 15, stdin);
+    if (fgets(input, 15, stdin) == NULL) {
+        return 0;
+    }
     input[strcspn(input, "\n\r")] = 0;
     if (!strcmp(input, "AggiungiGrafo")) {
         parse_matrix();
         compute_dijkstra();
-        print_result();
-        //add to ranking
+        //print_result();
+        //printf("LENGTH: %llu\n", dijkstra.length);
+        add_result();
         result_reset();
-        dijkstra.id++;
     } else if (!strcmp(input, "TopK")) {
-        //print ranking
+        print_ranking(ranking.ranking);
+        printf("\n");
     }
+    return 1;
 }
 
 int main() {
     parse_dimensions();
 
-    while (1) {
-        parse_command();
-    }
+    while (parse_command()) {}
 }
