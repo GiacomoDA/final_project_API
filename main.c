@@ -57,24 +57,19 @@ void queue_swap(unsigned long a, unsigned long b) {
     dijkstra.queue_position[dijkstra.queue[b]->node] = b;
 }
 
-void queue_decrease(unsigned long index, unsigned long new_value) {
-    dijkstra.queue[index]->cost = new_value;
+void queue_decrease(unsigned long index, unsigned long new_prev, unsigned long new_cost) {
+    dijkstra.queue[index]->previous = new_prev;
+    dijkstra.queue[index]->cost = new_cost;
     while (index != 0 && dijkstra.queue[queue_parent(index)]->cost > dijkstra.queue[index]->cost) {
         queue_swap(queue_parent(index), index);
         index = queue_parent(index);
     }
 }
 
-//void queue_add(struct queue_element *queue_element) {
-//    dijkstra.queue[dijkstra.queue_size] = queue_element;
-//    dijkstra.queue_position[queue_element->node] = dijkstra.queue_size;
-//    dijkstra.queue_size++;
-//}
-
 void queue_insert(struct queue_element *queue_element) {
     if (dijkstra.queue_size != 0 && (dijkstra.queue_position[queue_element->node] != 0 || dijkstra.queue[0]->node == queue_element->node)) {
         if (queue_element->cost < dijkstra.queue[dijkstra.queue_position[queue_element->node]]->cost)
-            queue_decrease(dijkstra.queue_position[queue_element->node], queue_element->cost);
+            queue_decrease(dijkstra.queue_position[queue_element->node], queue_element->previous, queue_element->cost);
         return;
     }
 
@@ -103,20 +98,6 @@ void queue_heapify(unsigned long index) {
     }
 }
 
-//void queue_make_heap() {
-//    unsigned long start = dijkstra.queue_size / 2;
-//    while (1) {
-//        queue_heapify(start);
-//        if (start == 0)
-//            break;
-//        start--;
-//    }
-//}
-
-//struct queue_element * queue_root() {
-//    return dijkstra.queue[0];
-//}
-
 struct queue_element * queue_extract_root() {
     if (dijkstra.queue_size == 0) {
         printf("ERROR: QUEUE IS EMPTY");
@@ -139,8 +120,8 @@ struct queue_element * queue_extract_root() {
 
 void queue_scan_row(unsigned long row) {
     for (int i = 1; i < dijkstra.graph_size; i++)
-        if (*(dijkstra.adj_matrix + sizeof(unsigned long) * i) != 0 && i != row)
-            queue_insert(new_queue_element(i, row, *(dijkstra.adj_matrix + sizeof(unsigned long) * i) + dijkstra.result[i]));
+        if (*(dijkstra.adj_matrix + row * dijkstra.graph_size + i) != 0 && i != row)
+            queue_insert(new_queue_element(i, row, *(dijkstra.adj_matrix + row * dijkstra.graph_size + i) + dijkstra.result[row]));
 }
 
 // -----------   PRINTERS   -----------
@@ -156,7 +137,7 @@ void queue_print() {
 void print_matrix() {
     for (int i = 0; i < dijkstra.graph_size; i++) {
         for (int j = 0; j < dijkstra.graph_size; j++) {
-            printf("%lu ", *(dijkstra.adj_matrix + dijkstra.graph_size * sizeof(unsigned long) * i + sizeof(unsigned long) * j));
+            printf("%lu ", *(dijkstra.adj_matrix + dijkstra.graph_size * i + j));
         }
         printf("\n");
     }
@@ -193,7 +174,7 @@ void parse_dimensions() {
 void parse_matrix() {
     for (int i = 0; i < dijkstra.graph_size; i++) {
         for (int j = 0; j < dijkstra.graph_size; j++) {
-            fscanf(stdin, "%lu,", dijkstra.adj_matrix + dijkstra.graph_size * sizeof(unsigned long) * i + sizeof(unsigned long) * j);
+            fscanf(stdin, "%lu,", dijkstra.adj_matrix + dijkstra.graph_size * i + j);
         }
         fgets(NULL, 1, stdin);
     }
@@ -201,18 +182,16 @@ void parse_matrix() {
 
 void compute_dijkstra() {
     dijkstra.queue_size = 0;
-    for (int i = 1; i < dijkstra.graph_size; i++)
-        if (*(dijkstra.adj_matrix + sizeof(unsigned long) * i) != 0)
-            queue_insert(new_queue_element(i, 0, *(dijkstra.adj_matrix + sizeof(unsigned long) * i)));
+    queue_scan_row(0);
 
     while (dijkstra.queue_size != 0) {
-        queue_print();
+        //queue_print();
         struct queue_element *root = queue_extract_root();
         if (dijkstra.result[root->node] == 0 || root->cost < dijkstra.result[root->node]) {
             dijkstra.result[root->node] = root->cost;
             queue_scan_row(root->node);
-            free(root);
         }
+        free(root);
     }
 }
 
