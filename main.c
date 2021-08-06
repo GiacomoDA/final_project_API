@@ -132,9 +132,9 @@ struct queue_element * queue_extract_root() {
     return temp;
 }
 
-void queue_scan_row(unsigned long row) {
+void queue_scan_row(unsigned long row, unsigned long previous) {
     for (int i = 1; i < dijkstra.graph_size; i++)
-        if (*(dijkstra.adj_matrix + row * dijkstra.graph_size + i) != 0 && i != row)
+        if (*(dijkstra.adj_matrix + row * dijkstra.graph_size + i) != 0 && i != row && i != previous)
             queue_insert(new_queue_element(i, row, *(dijkstra.adj_matrix + row * dijkstra.graph_size + i) + dijkstra.result[row]));
 }
 
@@ -306,13 +306,13 @@ void add_result() {
 
 void compute_dijkstra() {
     dijkstra.queue_size = 0;
-    queue_scan_row(0);
+    queue_scan_row(0, 0);
 
     while (dijkstra.queue_size != 0) {
         struct queue_element *root = queue_extract_root();
         if (dijkstra.result[root->node] == 0 || root->cost < dijkstra.result[root->node]) {
             dijkstra.result[root->node] = root->cost;
-            queue_scan_row(root->node);
+            queue_scan_row(root->node, root->previous);
         }
         free(root);
     }
