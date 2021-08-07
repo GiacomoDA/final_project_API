@@ -1,10 +1,8 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
 
 struct queue_element {
     unsigned long node;
-    unsigned long previous;
     unsigned long cost;
 };
 
@@ -14,7 +12,7 @@ struct stack_node {
 };
 
 struct tree_node {
-    unsigned long long length;
+    unsigned long length;
     struct tree_node *left;
     struct tree_node *right;
     struct stack_node *stack;
@@ -27,16 +25,17 @@ struct {
     unsigned long queue_size;
     struct queue_element **queue;
     unsigned long *queue_position;
-    unsigned long long *result;
-    unsigned long long length;
+    unsigned long *result;
+    unsigned long length;
 } dijkstra = {.id = 0,
               .length = 0};
 
 struct {
-    unsigned long long max;
+    unsigned long max;
     unsigned long size;
     unsigned long size_curr;
     struct tree_node *ranking;
+    unsigned long printed;
 } ranking = {.max = 0,
              .size_curr = 0,
              .ranking = NULL};
@@ -55,10 +54,9 @@ unsigned long queue_right(unsigned long index) {
     return (2 * index + 2);
 }
 
-struct queue_element * new_queue_element(unsigned long node, unsigned long previous, unsigned long cost) {
+struct queue_element * new_queue_element(unsigned long node, unsigned long cost) {
     struct queue_element *temp = (struct queue_element *) malloc(sizeof(struct queue_element));
     temp->node = node;
-    temp->previous = previous;
     temp->cost = cost;
     return temp;
 }
@@ -71,8 +69,7 @@ void queue_swap(unsigned long a, unsigned long b) {
     dijkstra.queue_position[dijkstra.queue[b]->node] = b;
 }
 
-void queue_decrease(unsigned long index, unsigned long new_prev, unsigned long new_cost) {
-    dijkstra.queue[index]->previous = new_prev;
+void queue_decrease(unsigned long index, unsigned long new_cost) {
     dijkstra.queue[index]->cost = new_cost;
     while (index != 0 && dijkstra.queue[queue_parent(index)]->cost > dijkstra.queue[index]->cost) {
         queue_swap(queue_parent(index), index);
@@ -83,7 +80,7 @@ void queue_decrease(unsigned long index, unsigned long new_prev, unsigned long n
 void queue_insert(struct queue_element *queue_element) {
     if (dijkstra.queue_size != 0 && (dijkstra.queue_position[queue_element->node] != 0 || dijkstra.queue[0]->node == queue_element->node)) {
         if (queue_element->cost < dijkstra.queue[dijkstra.queue_position[queue_element->node]]->cost)
-            queue_decrease(dijkstra.queue_position[queue_element->node], queue_element->previous, queue_element->cost);
+            queue_decrease(dijkstra.queue_position[queue_element->node], queue_element->cost);
         return;
     }
 
@@ -132,10 +129,10 @@ struct queue_element * queue_extract_root() {
     return temp;
 }
 
-void queue_scan_row(unsigned long row, unsigned long previous) {
+void queue_scan_row(unsigned long row) {
     for (int i = 1; i < dijkstra.graph_size; i++)
-        if (*(dijkstra.adj_matrix + row * dijkstra.graph_size + i) != 0 && i != row && i != previous)
-            queue_insert(new_queue_element(i, row, *(dijkstra.adj_matrix + row * dijkstra.graph_size + i) + dijkstra.result[row]));
+        if (*(dijkstra.adj_matrix + row * dijkstra.graph_size + i) != 0 && i != row)
+            queue_insert(new_queue_element(i, *(dijkstra.adj_matrix + row * dijkstra.graph_size + i) + dijkstra.result[row]));
 }
 
 // -----------   STACK   -----------
@@ -158,7 +155,7 @@ void pop(struct stack_node **stack) {
 
 // -----------   TREE   -----------
 
-struct tree_node * new_tree_node(unsigned long id, unsigned long long length) {
+struct tree_node * new_tree_node(unsigned long id, unsigned long length) {
     struct tree_node *temp = (struct tree_node *) malloc(sizeof(struct tree_node));
     temp->length = length;
     temp->left = NULL;
@@ -168,7 +165,7 @@ struct tree_node * new_tree_node(unsigned long id, unsigned long long length) {
     return temp;
 }
 
-struct tree_node * search(struct tree_node **tree, unsigned long long length) {
+struct tree_node * search(struct tree_node **tree, unsigned long length) {
     if ((*tree) == NULL)
         return NULL;
     if ((*tree)->length == length)
@@ -176,7 +173,7 @@ struct tree_node * search(struct tree_node **tree, unsigned long long length) {
     return (*tree)->length > length ? search(&(*tree)->left, length) : search(&(*tree)->right, length);
 }
 
-unsigned long long max(struct tree_node **tree) {
+unsigned long max(struct tree_node **tree) {
     if (*tree == NULL)
         return 0;
     if ((*tree)->right == NULL)
@@ -194,7 +191,7 @@ void remove_max(struct tree_node **tree) {
     } else remove_max(&(*tree)->right);
 }
 
-unsigned long long get_max(struct tree_node *tree) {
+unsigned long get_max(struct tree_node *tree) {
     if (tree == NULL)
         return 0;
     if (tree->right == NULL)
@@ -202,7 +199,7 @@ unsigned long long get_max(struct tree_node *tree) {
     else return get_max(tree->right);
 }
 
-void insert(struct tree_node **tree, unsigned long id, unsigned long long length) {
+void insert(struct tree_node **tree, unsigned long id, unsigned long length) {
     if (*tree == NULL) {
         *tree = new_tree_node(id, length);
         return;
@@ -219,7 +216,7 @@ void insert(struct tree_node **tree, unsigned long id, unsigned long long length
 
 void queue_print() {
     for (unsigned long i = 0; i < dijkstra.queue_size; i++)
-        printf("node: %lu previous: %lu cost: %lu\n", dijkstra.queue[i]->node, dijkstra.queue[i]->previous, dijkstra.queue[i]->cost);
+        printf("node: %lu cost: %lu\n", dijkstra.queue[i]->node, dijkstra.queue[i]->cost);
     for (unsigned long i = 1; i <= dijkstra.queue_size; i++)
         printf("%lu: %lu\n", i, dijkstra.queue_position[i]);
     printf("\n");
@@ -238,12 +235,15 @@ void print_result() {
     setbuf(stdout, 0);
     printf("%lu: ", dijkstra.id);
     for (unsigned long i = 1; i < dijkstra.graph_size; i++)
-        printf("%lu:%llu ", i, dijkstra.result[i]);
+        printf("%lu:%lu ", i, dijkstra.result[i]);
 }
 
 void print_stack(struct stack_node *stack) {
     if (stack != NULL) {
-        printf("%lu ", stack->graph_id);
+        printf("%lu", stack->graph_id);
+        ranking.printed++;
+        if (ranking.printed < ranking.size_curr)
+            printf(" ");
         print_stack(stack->next);
     }
 }
@@ -258,9 +258,7 @@ void print_ranking(struct tree_node *tree) {
 
 // -----------   OTHERS   -----------
 
-void result_reset() {
-    for (int i = 1; i < dijkstra.graph_size; i++)
-        dijkstra.result[i] = 0;
+void reset() {
     dijkstra.length = 0;
     dijkstra.id++;
 }
@@ -269,26 +267,43 @@ void setup() {
     dijkstra.adj_matrix = (unsigned long *) malloc(dijkstra.graph_size * dijkstra.graph_size * sizeof(unsigned long));
     dijkstra.queue = (struct queue_element **) malloc(dijkstra.graph_size * sizeof(struct queue_element *));
     dijkstra.queue_position = (unsigned long *) calloc(dijkstra.graph_size, sizeof(unsigned long));
-    dijkstra.result = (unsigned long long *) calloc(dijkstra.graph_size, sizeof(unsigned long long));
+    dijkstra.result = (unsigned long *) malloc(dijkstra.graph_size * sizeof(unsigned long));
 }
 
 void parse_dimensions() {
-    if (!fscanf(stdin, "%lu", &dijkstra.graph_size))
-        printf("error1");
-    if (!fscanf(stdin, "%lu\n", &ranking.size))
-        printf("error2");
+    char input[22];
+    char *pointer;
+    if (fgets(input, 22, stdin) == NULL)
+        printf("error");
+    dijkstra.graph_size = strtoul(input, &pointer, 10);
+    ranking.size = strtoul(pointer, NULL, 10);
     setup();
 }
 
 void parse_matrix() {
+    char input[20000];
+    char *pointer;
+    unsigned long *cell;
     for (int i = 0; i < dijkstra.graph_size; i++) {
+        if (fgets(input, 20000, stdin) == NULL)
+            printf("error");
+        pointer = input;
         for (int j = 0; j < dijkstra.graph_size; j++) {
-            if(!fscanf(stdin, "%lu,", dijkstra.adj_matrix + dijkstra.graph_size * i + j))
-                printf("error3");
+            cell = dijkstra.adj_matrix + dijkstra.graph_size * i + j;
+            *cell = strtoul(pointer, &pointer, 10);
+            pointer++;
         }
-        if(getchar() != '\n')
-            printf("error4");
     }
+}
+
+int string_compare(char *a, char *b) {
+    while(*a == *b) {
+        if (*a == 0 && *b == 0)
+            return 1;
+        a++;
+        b++;
+    }
+    return 0;
 }
 
 void add_result() {
@@ -306,18 +321,32 @@ void add_result() {
 
 void compute_dijkstra() {
     dijkstra.queue_size = 0;
-    queue_scan_row(0, 0);
+    dijkstra.result[0] = 0;
+    queue_insert(new_queue_element(0, 0));
+    for (int i = 1; i < dijkstra.graph_size; i++) {
+        dijkstra.result[i] = 4294967295;
+        queue_insert(new_queue_element(i, dijkstra.result[i]));
+    }
 
     while (dijkstra.queue_size != 0) {
         struct queue_element *root = queue_extract_root();
-        if (dijkstra.result[root->node] == 0 || root->cost < dijkstra.result[root->node]) {
-            dijkstra.result[root->node] = root->cost;
-            queue_scan_row(root->node, root->previous);
+        for (int i = 1; i < dijkstra.graph_size; i++) {
+            unsigned long distance = *(dijkstra.adj_matrix + root->node * dijkstra.graph_size + i);
+            if (distance != 0) {
+                unsigned long temp = dijkstra.result[root->node] + distance;
+                if (temp < dijkstra.result[root->node] || temp < distance)
+                    temp = 4294967295;
+                if (temp < dijkstra.result[i]) {
+                    dijkstra.result[i] = temp;
+                    queue_decrease(dijkstra.queue_position[i], temp);
+                }
+            }
         }
         free(root);
     }
     for (int i = 1; i < dijkstra.graph_size; i++) {
-        dijkstra.length += dijkstra.result[i];
+        if (dijkstra.result[i] != 4294967295)
+            dijkstra.length += dijkstra.result[i];
     }
 }
 
@@ -326,15 +355,13 @@ int parse_command() {
     if (fgets(input, 15, stdin) == NULL) {
         return 0;
     }
-    input[strcspn(input, "\n\r")] = 0;
-    if (!strcmp(input, "AggiungiGrafo")) {
+    if (string_compare(input, "AggiungiGrafo\n")) {
         parse_matrix();
         compute_dijkstra();
-        //print_result();
-        //printf("LENGTH: %llu\n", dijkstra.length);
         add_result();
-        result_reset();
-    } else if (!strcmp(input, "TopK")) {
+        reset();
+    } else if (string_compare(input, "TopK\n")) {
+        ranking.printed = 0;
         print_ranking(ranking.ranking);
         printf("\n");
     }
