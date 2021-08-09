@@ -314,38 +314,36 @@ void fix_deletion(struct tree_node *node, struct tree_node *parent) {
     }
 }
 
-void remove_max(struct tree_node **tree) {
+void remove_max(struct tree_node **max) {
+    pop(&(*max)->stack);
+    if ((*max)->stack == NULL) {
+        struct tree_node *temp = *max;
+        if ((*max)->parent == NULL) {
+            (*max)->left->color = 'B';
+            (*max)->parent = NULL;
+            ranking.root = (*max)->left;
+        } else {
+            if (temp->left == NULL)
+                temp->parent->right = NULL;
+            else {
+                temp->parent->right = temp->left;
+                temp->left->parent = temp->parent;
+            }
+            fix_deletion(temp->left, temp->parent);
+        }
+        free(temp);
+    }
+}
+
+void set_max(struct tree_node **tree) {
     if (*tree == NULL)
         return;
     if ((*tree)->right == NULL) {
-        pop(&(*tree)->stack);
-        ranking.size_curr--;
-        if ((*tree)->stack == NULL) {
-            struct tree_node *temp = *tree;
-            if ((*tree)->parent == NULL) {
-                (*tree)->left->color = 'B';
-                (*tree)->parent = NULL;
-                ranking.root = (*tree)->left;
-            } else {
-                if (temp->left == NULL)
-                    temp->parent->right = NULL;
-                else {
-                    temp->parent->right = temp->left;
-                    temp->left->parent = temp->parent;
-                }
-                fix_deletion(temp->left, temp->parent);
-            }
-            free(temp);
-        }
-    } else remove_max(&(*tree)->right);
-}
-
-unsigned long get_max(struct tree_node *tree) {
-    if (tree == NULL)
-        return 0;
-    if (tree->right == NULL)
-        return tree->length;
-    else return get_max(tree->right);
+        ranking.max = (*tree)->length;
+        ranking.max_position = *tree;
+        return;
+    }
+    else set_max(&(*tree)->right);
 }
 
 void insert(struct tree_node **tree, unsigned long id, unsigned long length, struct tree_node *parent) {
@@ -403,8 +401,6 @@ void print_stack(struct stack_node *stack) {
 void print_top(struct tree_node *tree) {
     if (tree != NULL) {
         print_top(tree->left);
-//        if (ranking.printed >= ranking.size_curr)
-//            return;
         print_stack(tree->stack);
         print_top(tree->right);
     }
@@ -464,13 +460,11 @@ void add_result() {
     if (ranking.size_curr < ranking.size) {
         insert(&ranking.root, dijkstra.id, dijkstra.length, NULL);
         ranking.size_curr++;
-        if (dijkstra.length > ranking.max)
-            ranking.max = dijkstra.length;
+        set_max(&ranking.root);
     } else if (dijkstra.length < ranking.max) {
-        remove_max(&ranking.root);
+        remove_max(&ranking.max_position);
         insert(&ranking.root, dijkstra.id, dijkstra.length, NULL);
-        ranking.size_curr++;
-        ranking.max = get_max(ranking.root);
+        set_max(&ranking.root);
     }
 }
 
