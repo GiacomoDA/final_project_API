@@ -15,7 +15,9 @@ struct tree_node {
     unsigned long length;
     struct tree_node *left;
     struct tree_node *right;
+    struct tree_node *parent;
     struct stack_node *stack;
+    char color;
 };
 
 struct {
@@ -34,11 +36,12 @@ struct {
     unsigned long max;
     unsigned long size;
     unsigned long size_curr;
-    struct tree_node *ranking;
+    struct tree_node *root;
+    struct tree_node *max_position;
     unsigned long printed;
 } ranking = {.max = 0,
              .size_curr = 0,
-             .ranking = NULL};
+             .root = NULL};
 
 // -----------   QUEUE METHODS   -----------
 
@@ -129,12 +132,6 @@ struct queue_element * queue_extract_root() {
     return temp;
 }
 
-void queue_scan_row(unsigned long row) {
-    for (int i = 1; i < dijkstra.graph_size; i++)
-        if (*(dijkstra.adj_matrix + row * dijkstra.graph_size + i) != 0 && i != row)
-            queue_insert(new_queue_element(i, *(dijkstra.adj_matrix + row * dijkstra.graph_size + i) + dijkstra.result[row]));
-}
-
 // -----------   STACK   -----------
 
 void push (struct stack_node **stack, unsigned long graph_id) {
@@ -155,12 +152,14 @@ void pop(struct stack_node **stack) {
 
 // -----------   TREE   -----------
 
-struct tree_node * new_tree_node(unsigned long id, unsigned long length) {
+struct tree_node * new_tree_node(unsigned long id, unsigned long length, struct tree_node *parent) {
     struct tree_node *temp = (struct tree_node *) malloc(sizeof(struct tree_node));
     temp->length = length;
     temp->left = NULL;
     temp->right = NULL;
+    temp->parent = parent;
     temp->stack = NULL;
+    temp->color = 'R';
     push(&temp->stack, id);
     return temp;
 }
@@ -173,12 +172,146 @@ struct tree_node * search(struct tree_node **tree, unsigned long length) {
     return (*tree)->length > length ? search(&(*tree)->left, length) : search(&(*tree)->right, length);
 }
 
-unsigned long max(struct tree_node **tree) {
-    if (*tree == NULL)
-        return 0;
-    if ((*tree)->right == NULL)
-        return (*tree)->length;
-    else return max(&(*tree)->right);
+void left_rotate(struct tree_node *node) {
+    struct tree_node *right = node->right;
+    node->right = right->left;
+    if (node->right)
+        node->right->parent = node;
+    right->parent = node->parent;
+    if (node->parent == NULL)
+        ranking.root = right;
+    else if (node == node->parent->left)
+        node->parent->left = right;
+    else
+        node->parent->right = right;
+    right->left = node;
+    node->parent = right;
+}
+
+void right_rotate(struct tree_node *node) {
+    struct tree_node* left = node->left;
+    node->left = left->right;
+    if (node->left)
+        node->left->parent = node;
+    left->parent = node->parent;
+    if (node->parent == NULL)
+        ranking.root = left;
+    else if (node == node->parent->left)
+        node->parent->left = left;
+    else
+        node->parent->right = left;
+    left->right = node;
+    node->parent = left;
+}
+
+void fix_insertion(struct tree_node *root, struct tree_node *node) {
+    struct tree_node* parent;
+    struct tree_node* grand_parent;
+
+    while (node != root && node->color != 'B' && node->parent->color == 'R') {
+        parent = node->parent;
+        grand_parent = node->parent->parent;
+
+        if (parent == grand_parent->left) {
+            struct tree_node* uncle = grand_parent->right;
+            if (uncle != NULL && uncle->color == 'R') {
+                grand_parent->color = 'R';
+                parent->color = 'B';
+                uncle->color = 'B';
+                node = grand_parent;
+            } else {
+                if (node == parent->right) {
+                    left_rotate(parent);
+                    node = parent;
+                    parent = node->parent;
+                }
+                right_rotate(grand_parent);
+                char color = parent->color;
+                parent->color = grand_parent->color;
+                grand_parent->color = color;
+                node = parent;
+            }
+        } else {
+            struct tree_node* uncle = grand_parent->left;
+            if (uncle != NULL && uncle->color == 'R') {
+                grand_parent->color = 'R';
+                parent->color = 'B';
+                uncle->color = 'B';
+                node = grand_parent;
+            } else {
+                if (node == parent->left) {
+                    right_rotate(parent);
+                    node = parent;
+                    parent = node->parent;
+                }
+                left_rotate(grand_parent);
+                char color = parent->color;
+                parent->color = grand_parent->color;
+                grand_parent->color = color;
+                node = parent;
+            }
+        }
+    }
+    root->color = 'B';
+}
+
+void fix_deletion(struct tree_node *node, struct tree_node *parent) {
+    if (node != NULL && node->color == 'R')
+        node->color = 'B';
+    else if (parent->left == node) {
+        if (parent->right == NULL)
+            return;
+        if (parent->right->color == 'R') {
+            parent->right->color = 'B';
+            parent->color = 'R';
+            left_rotate(parent);
+        }
+        if (parent->right != NULL && (parent->right->right == NULL || parent->right->right->color == 'B') && (parent->right->left == NULL || parent->right->left->color == 'B')) {
+            parent->right->color = 'R';
+            fix_deletion(parent, parent->parent);
+            return;
+        } else if (parent->right != NULL && (parent->right->right == NULL || parent->right->right->color == 'B')) {
+            if (parent->right->left == NULL)
+                parent->color = 'B';
+            else if (parent->right->left != NULL){
+                parent->right->color = parent->right->left->color;
+                parent->right->left->color = 'B';
+            }
+            if (parent->right->left != NULL)
+                right_rotate(parent->right);
+        }
+        if (parent->right != NULL && parent->right->right != NULL && parent->right->right->color == 'R') {
+            parent->right->color = parent->color;
+            parent->right->right->color = 'B';
+            left_rotate(parent);
+        }
+    } else {
+        if (parent->left == NULL)
+            return;
+        if (parent->left->color == 'R') {
+            parent->left->color = 'B';
+            parent->color = 'R';
+            right_rotate(parent);
+        }
+        if (parent->right != NULL && (parent->left->left == NULL || parent->left->left->color == 'B') && (parent->left->right == NULL || parent->left->right->color == 'B')) {
+            parent->left->color = 'R';
+            fix_deletion(parent, parent->parent);
+        } else if (parent->left != NULL && (parent->left->left == NULL || parent->left->left->color == 'B')) {
+            if (parent->left == NULL)
+                parent->color = 'B';
+            else if (parent->left->right != NULL) {
+                parent->left->color = parent->left->right->color;
+                parent->left->right->color = 'B';
+            }
+            if (parent->left->right != NULL)
+                left_rotate(parent->left);
+        }
+        if (parent->left != NULL && parent->left->left != NULL && parent->left->left->color == 'R') {
+            parent->left->color = parent->color;
+            parent->left->left->color = 'B';
+            right_rotate(parent);
+        }
+    }
 }
 
 void remove_max(struct tree_node **tree) {
@@ -186,8 +319,24 @@ void remove_max(struct tree_node **tree) {
         return;
     if ((*tree)->right == NULL) {
         pop(&(*tree)->stack);
-        if ((*tree)->stack == NULL)
-            *tree = (*tree)->left;
+        ranking.size_curr--;
+        if ((*tree)->stack == NULL) {
+            struct tree_node *temp = *tree;
+            if ((*tree)->parent == NULL) {
+                (*tree)->left->color = 'B';
+                (*tree)->parent = NULL;
+                ranking.root = (*tree)->left;
+            } else {
+                if (temp->left == NULL)
+                    temp->parent->right = NULL;
+                else {
+                    temp->parent->right = temp->left;
+                    temp->left->parent = temp->parent;
+                }
+                fix_deletion(temp->left, temp->parent);
+            }
+            free(temp);
+        }
     } else remove_max(&(*tree)->right);
 }
 
@@ -199,16 +348,17 @@ unsigned long get_max(struct tree_node *tree) {
     else return get_max(tree->right);
 }
 
-void insert(struct tree_node **tree, unsigned long id, unsigned long length) {
+void insert(struct tree_node **tree, unsigned long id, unsigned long length, struct tree_node *parent) {
     if (*tree == NULL) {
-        *tree = new_tree_node(id, length);
+        *tree = new_tree_node(id, length, parent);
+        fix_insertion(ranking.root, *tree);
         return;
     }
 
     if ((*tree)->length > length)
-        insert(&(*tree)->left, id, length);
+        insert(&(*tree)->left, id, length, *tree);
     else if ((*tree)->length < length)
-        insert(&(*tree)->right, id, length);
+        insert(&(*tree)->right, id, length, *tree);
     else push(&(*tree)->stack, id);
 }
 
@@ -240,19 +390,23 @@ void print_result() {
 
 void print_stack(struct stack_node *stack) {
     if (stack != NULL) {
-        printf("%lu", stack->graph_id);
-        ranking.printed++;
+        if (ranking.printed < ranking.size_curr) {
+            printf("%lu", stack->graph_id);
+            ranking.printed++;
+        }
         if (ranking.printed < ranking.size_curr)
             printf(" ");
         print_stack(stack->next);
     }
 }
 
-void print_ranking(struct tree_node *tree) {
+void print_top(struct tree_node *tree) {
     if (tree != NULL) {
+        print_top(tree->left);
+//        if (ranking.printed >= ranking.size_curr)
+//            return;
         print_stack(tree->stack);
-        print_ranking(tree->left);
-        print_ranking(tree->right);
+        print_top(tree->right);
     }
 }
 
@@ -308,14 +462,15 @@ int string_compare(char *a, char *b) {
 
 void add_result() {
     if (ranking.size_curr < ranking.size) {
-        insert(&ranking.ranking, dijkstra.id, dijkstra.length);
+        insert(&ranking.root, dijkstra.id, dijkstra.length, NULL);
         ranking.size_curr++;
         if (dijkstra.length > ranking.max)
             ranking.max = dijkstra.length;
     } else if (dijkstra.length < ranking.max) {
-        remove_max(&ranking.ranking);
-        insert(&ranking.ranking, dijkstra.id, dijkstra.length);
-        ranking.max = get_max(ranking.ranking);
+        remove_max(&ranking.root);
+        insert(&ranking.root, dijkstra.id, dijkstra.length, NULL);
+        ranking.size_curr++;
+        ranking.max = get_max(ranking.root);
     }
 }
 
@@ -362,7 +517,7 @@ int parse_command() {
         reset();
     } else if (string_compare(input, "TopK\n")) {
         ranking.printed = 0;
-        print_ranking(ranking.ranking);
+        print_top(ranking.root);
         printf("\n");
     }
     return 1;
