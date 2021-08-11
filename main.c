@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-struct queue_element {
+struct queue_node {
     unsigned long node;
     unsigned long cost;
 };
@@ -25,7 +25,7 @@ struct {
     unsigned long graph_size;
     unsigned long *adj_matrix;
     unsigned long queue_size;
-    struct queue_element **queue;
+    struct queue_node **queue;
     unsigned long *queue_position;
     unsigned long *result;
     unsigned long length;
@@ -37,11 +37,11 @@ struct {
     unsigned long size;
     unsigned long size_curr;
     struct tree_node *root;
+    struct tree_node *nil;
     struct tree_node *max_position;
     unsigned long printed;
-} ranking = {.max = 0,
-             .size_curr = 0,
-             .root = NULL};
+} leaderboard = {.max = 0,
+                 .size_curr = 0};
 
 // -----------   QUEUE METHODS   -----------
 
@@ -57,15 +57,15 @@ unsigned long queue_right(unsigned long index) {
     return (2 * index + 2);
 }
 
-struct queue_element * new_queue_element(unsigned long node, unsigned long cost) {
-    struct queue_element *temp = (struct queue_element *) malloc(sizeof(struct queue_element));
+struct queue_node * new_queue_node(unsigned long node, unsigned long cost) {
+    struct queue_node *temp = (struct queue_node *) malloc(sizeof(struct queue_node));
     temp->node = node;
     temp->cost = cost;
     return temp;
 }
 
 void queue_swap(unsigned long a, unsigned long b) {
-    struct queue_element *temp = dijkstra.queue[a];
+    struct queue_node *temp = dijkstra.queue[a];
     dijkstra.queue[a] = dijkstra.queue[b];
     dijkstra.queue[b] = temp;
     dijkstra.queue_position[dijkstra.queue[a]->node] = a;
@@ -80,17 +80,17 @@ void queue_decrease(unsigned long index, unsigned long new_cost) {
     }
 }
 
-void queue_insert(struct queue_element *queue_element) {
-    if (dijkstra.queue_size != 0 && (dijkstra.queue_position[queue_element->node] != 0 || dijkstra.queue[0]->node == queue_element->node)) {
-        if (queue_element->cost < dijkstra.queue[dijkstra.queue_position[queue_element->node]]->cost)
-            queue_decrease(dijkstra.queue_position[queue_element->node], queue_element->cost);
+void queue_insert(struct queue_node *queue_node) {
+    if (dijkstra.queue_size != 0 && (dijkstra.queue_position[queue_node->node] != 0 || dijkstra.queue[0]->node == queue_node->node)) {
+        if (queue_node->cost < dijkstra.queue[dijkstra.queue_position[queue_node->node]]->cost)
+            queue_decrease(dijkstra.queue_position[queue_node->node], queue_node->cost);
         return;
     }
 
     dijkstra.queue_size++;
     unsigned long index = dijkstra.queue_size - 1;
-    dijkstra.queue[index] = queue_element;
-    dijkstra.queue_position[queue_element->node] = index;
+    dijkstra.queue[index] = queue_node;
+    dijkstra.queue_position[queue_node->node] = index;
 
     while (index != 0 && dijkstra.queue[index]->cost < dijkstra.queue[queue_parent(index)]->cost) {
         queue_swap(index, queue_parent(index));
@@ -112,13 +112,13 @@ void queue_heapify(unsigned long index) {
     }
 }
 
-struct queue_element * queue_extract_root() {
+struct queue_node * queue_extract_root() {
     if (dijkstra.queue_size == 0) {
         printf("ERROR: QUEUE IS EMPTY");
         return NULL;
     }
 
-    struct queue_element *temp = dijkstra.queue[0];
+    struct queue_node *temp = dijkstra.queue[0];
 
     if (dijkstra.queue_size == 1) {
         dijkstra.queue_size--;
@@ -134,9 +134,9 @@ struct queue_element * queue_extract_root() {
 
 // -----------   STACK   -----------
 
-void push (struct stack_node **stack, unsigned long graph_id) {
+void push (struct stack_node **stack, unsigned long id) {
     struct stack_node *temp = (struct stack_node *) malloc(sizeof(struct stack_node));
-    temp->graph_id = graph_id;
+    temp->graph_id = id;
     temp->next = *stack;
     *stack = temp;
 }
@@ -155,8 +155,8 @@ void pop(struct stack_node **stack) {
 struct tree_node * new_tree_node(unsigned long id, unsigned long length, struct tree_node *parent) {
     struct tree_node *temp = (struct tree_node *) malloc(sizeof(struct tree_node));
     temp->length = length;
-    temp->left = NULL;
-    temp->right = NULL;
+    temp->left = leaderboard.nil;
+    temp->right = leaderboard.nil;
     temp->parent = parent;
     temp->stack = NULL;
     temp->color = 'R';
@@ -165,8 +165,8 @@ struct tree_node * new_tree_node(unsigned long id, unsigned long length, struct 
 }
 
 struct tree_node * search(struct tree_node **tree, unsigned long length) {
-    if ((*tree) == NULL)
-        return NULL;
+    if ((*tree) == leaderboard.nil)
+        return leaderboard.nil;
     if ((*tree)->length == length)
         return *tree;
     return (*tree)->length > length ? search(&(*tree)->left, length) : search(&(*tree)->right, length);
@@ -175,15 +175,14 @@ struct tree_node * search(struct tree_node **tree, unsigned long length) {
 void left_rotate(struct tree_node *node) {
     struct tree_node *right = node->right;
     node->right = right->left;
-    if (node->right)
-        node->right->parent = node;
+    if (right->left != leaderboard.nil)
+        right->left->parent = node;
     right->parent = node->parent;
-    if (node->parent == NULL)
-        ranking.root = right;
+    if (node->parent == leaderboard.nil)
+        leaderboard.root = right;
     else if (node == node->parent->left)
         node->parent->left = right;
-    else
-        node->parent->right = right;
+    else node->parent->right = right;
     right->left = node;
     node->parent = right;
 }
@@ -191,165 +190,150 @@ void left_rotate(struct tree_node *node) {
 void right_rotate(struct tree_node *node) {
     struct tree_node* left = node->left;
     node->left = left->right;
-    if (node->left)
-        node->left->parent = node;
+    if (left->right != leaderboard.nil)
+        left->right->parent = node;
     left->parent = node->parent;
-    if (node->parent == NULL)
-        ranking.root = left;
+    if (node->parent == leaderboard.nil)
+        leaderboard.root = left;
     else if (node == node->parent->left)
         node->parent->left = left;
-    else
-        node->parent->right = left;
+    else node->parent->right = left;
     left->right = node;
     node->parent = left;
 }
 
-void fix_insertion(struct tree_node *root, struct tree_node *node) {
-    struct tree_node* parent;
-    struct tree_node* grand_parent;
-
-    while (node != root && node->color != 'B' && node->parent->color == 'R') {
-        parent = node->parent;
-        grand_parent = node->parent->parent;
-
-        if (parent == grand_parent->left) {
-            struct tree_node* uncle = grand_parent->right;
-            if (uncle != NULL && uncle->color == 'R') {
-                grand_parent->color = 'R';
-                parent->color = 'B';
+void fix_insertion(struct tree_node *node) {
+    struct tree_node *uncle;
+    while (node->parent->color == 'R') {
+        if (node->parent == node->parent->parent->left) {
+            uncle = node->parent->parent->right;
+            if (uncle->color == 'R') {
+                node->parent->color = 'B';
                 uncle->color = 'B';
-                node = grand_parent;
+                node->parent->parent->color = 'R';
+                node = node->parent->parent;
             } else {
-                if (node == parent->right) {
-                    left_rotate(parent);
-                    node = parent;
-                    parent = node->parent;
+                if (node == node->parent->right) {
+                    node = node->parent;
+                    left_rotate(node);
                 }
-                right_rotate(grand_parent);
-                char color = parent->color;
-                parent->color = grand_parent->color;
-                grand_parent->color = color;
-                node = parent;
+                node->parent->color = 'B';
+                node->parent->parent->color = 'R';
+                right_rotate(node->parent->parent);
             }
         } else {
-            struct tree_node* uncle = grand_parent->left;
-            if (uncle != NULL && uncle->color == 'R') {
-                grand_parent->color = 'R';
-                parent->color = 'B';
+            uncle = node->parent->parent->left;
+            if (uncle->color == 'R') {
+                node->parent->color = 'B';
                 uncle->color = 'B';
-                node = grand_parent;
+                node->parent->parent->color = 'R';
+                node = node->parent->parent;
             } else {
-                if (node == parent->left) {
-                    right_rotate(parent);
-                    node = parent;
-                    parent = node->parent;
+                if (node == node->parent->left) {
+                    node = node->parent;
+                    right_rotate(node);
                 }
-                left_rotate(grand_parent);
-                char color = parent->color;
-                parent->color = grand_parent->color;
-                grand_parent->color = color;
-                node = parent;
+                node->parent->color = 'B';
+                node->parent->parent->color = 'R';
+                left_rotate(node->parent->parent);
             }
         }
     }
-    root->color = 'B';
+    leaderboard.root->color = 'B';
 }
 
-void fix_deletion(struct tree_node *node, struct tree_node *parent) {
-    if (node != NULL && node->color == 'R')
-        node->color = 'B';
-    else if (parent->left == node) {
-        if (parent->right == NULL)
-            return;
-        if (parent->right->color == 'R') {
-            parent->right->color = 'B';
-            parent->color = 'R';
-            left_rotate(parent);
-        }
-        if (parent->right != NULL && (parent->right->right == NULL || parent->right->right->color == 'B') && (parent->right->left == NULL || parent->right->left->color == 'B')) {
-            parent->right->color = 'R';
-            fix_deletion(parent, parent->parent);
-            return;
-        } else if (parent->right != NULL && (parent->right->right == NULL || parent->right->right->color == 'B')) {
-            if (parent->right->left == NULL)
-                parent->color = 'B';
-            else if (parent->right->left != NULL){
-                parent->right->color = parent->right->left->color;
-                parent->right->left->color = 'B';
+void fix_deletion(struct tree_node *node) {
+    struct tree_node *sibling;
+    while (node != leaderboard.root && node->color == 'B') {
+        if (node == node->parent->left) {
+            sibling = node->parent->right;
+            if (sibling->color == 'R') {
+                sibling->color = 'B';
+                node->parent->color = 'R';
+                left_rotate(node->parent);
+                sibling = node->parent->right;
             }
-            if (parent->right->left != NULL)
-                right_rotate(parent->right);
-        }
-        if (parent->right != NULL && parent->right->right != NULL && parent->right->right->color == 'R') {
-            parent->right->color = parent->color;
-            parent->right->right->color = 'B';
-            left_rotate(parent);
-        }
-    } else {
-        if (parent->left == NULL)
-            return;
-        if (parent->left->color == 'R') {
-            parent->left->color = 'B';
-            parent->color = 'R';
-            right_rotate(parent);
-        }
-        if (parent->right != NULL && (parent->left->left == NULL || parent->left->left->color == 'B') && (parent->left->right == NULL || parent->left->right->color == 'B')) {
-            parent->left->color = 'R';
-            fix_deletion(parent, parent->parent);
-        } else if (parent->left != NULL && (parent->left->left == NULL || parent->left->left->color == 'B')) {
-            if (parent->left == NULL)
-                parent->color = 'B';
-            else if (parent->left->right != NULL) {
-                parent->left->color = parent->left->right->color;
-                parent->left->right->color = 'B';
+            if (sibling->left->color == 'B' && sibling->right->color == 'B') {
+                sibling->color = 'R';
+                node = node->parent;
+            } else {
+                if (sibling->right->color == 'B') {
+                    sibling->left->color = 'B';
+                    sibling->color = 'R';
+                    right_rotate(sibling);
+                    sibling = node->parent->right;
+                }
+                sibling->color = node->parent->color;
+                node->parent->color = 'B';
+                sibling->right->color = 'B';
+                left_rotate(node->parent);
+                node = leaderboard.root;
             }
-            if (parent->left->right != NULL)
-                left_rotate(parent->left);
-        }
-        if (parent->left != NULL && parent->left->left != NULL && parent->left->left->color == 'R') {
-            parent->left->color = parent->color;
-            parent->left->left->color = 'B';
-            right_rotate(parent);
+        } else {
+            sibling = node->parent->left;
+            if (sibling->color == 'R') {
+                sibling->color = 'B';
+                node->parent->color = 'R';
+                right_rotate(node->parent);
+                sibling = node->parent->left;
+            }
+            if (sibling->left->color == 'B' && sibling->right->color == 'B') {
+                sibling->color = 'R';
+                node = node->parent;
+            } else {
+                if (sibling->left->color == 'B') {
+                    sibling->right->color = 'B';
+                    sibling->color = 'R';
+                    left_rotate(sibling);
+                    sibling = node->parent->left;
+                }
+                sibling->color = node->parent->color;
+                node->parent->color = 'B';
+                sibling->left->color = 'B';
+                right_rotate(node->parent);
+                node = leaderboard.root;
+            }
         }
     }
+    node->color = 'B';
 }
 
-void remove_max(struct tree_node **max) {
-    pop(&(*max)->stack);
-    if ((*max)->stack == NULL) {
-        struct tree_node *temp = *max;
-        if ((*max)->parent == NULL) {
-            (*max)->left->color = 'B';
-            (*max)->parent = NULL;
-            ranking.root = (*max)->left;
-        } else {
-            if (temp->left == NULL)
-                temp->parent->right = NULL;
-            else {
-                temp->parent->right = temp->left;
-                temp->left->parent = temp->parent;
+void remove_max(struct tree_node *max) {
+    pop(&max->stack);
+    if (max->stack == NULL) {
+        struct tree_node *temp = max;
+        if (max->parent == leaderboard.nil) {
+            if (max->left != leaderboard.nil) {
+                max->left->color = 'B';
+                max->left->parent = leaderboard.nil;
             }
-            fix_deletion(temp->left, temp->parent);
+            leaderboard.root = max->left;
+        } else {
+            max->parent->right = max->left;
+            max->left->parent = max->parent;
+            if (max->color == 'B')
+                fix_deletion(max->left);
         }
+        leaderboard.max_position = max->left;
         free(temp);
     }
 }
 
 void set_max(struct tree_node **tree) {
-    if (*tree == NULL)
+    if (*tree == leaderboard.nil)
         return;
-    if ((*tree)->right == NULL) {
-        ranking.max = (*tree)->length;
-        ranking.max_position = *tree;
+    if ((*tree)->right == leaderboard.nil) {
+        leaderboard.max = (*tree)->length;
+        leaderboard.max_position = *tree;
         return;
     }
     else set_max(&(*tree)->right);
 }
 
 void insert(struct tree_node **tree, unsigned long id, unsigned long length, struct tree_node *parent) {
-    if (*tree == NULL) {
+    if (*tree == leaderboard.nil) {
         *tree = new_tree_node(id, length, parent);
-        fix_insertion(ranking.root, *tree);
+        fix_insertion(*tree);
         return;
     }
 
@@ -388,18 +372,26 @@ void print_result() {
 
 void print_stack(struct stack_node *stack) {
     if (stack != NULL) {
-        if (ranking.printed < ranking.size_curr) {
+        if (leaderboard.printed < leaderboard.size_curr) {
             printf("%lu", stack->graph_id);
-            ranking.printed++;
+            leaderboard.printed++;
         }
-        if (ranking.printed < ranking.size_curr)
+        if (leaderboard.printed < leaderboard.size_curr)
             printf(" ");
         print_stack(stack->next);
     }
+
+//    if (stack == NULL)
+//        return;
+//    while (stack->next != NULL) {
+//        printf("%lu ", stack->graph_id);
+//        stack = stack->next;
+//    }
+//    printf("%lu", stack->graph_id);
 }
 
 void print_top(struct tree_node *tree) {
-    if (tree != NULL) {
+    if (tree != leaderboard.nil) {
         print_top(tree->left);
         print_stack(tree->stack);
         print_top(tree->right);
@@ -415,9 +407,15 @@ void reset() {
 
 void setup() {
     dijkstra.adj_matrix = (unsigned long *) malloc(dijkstra.graph_size * dijkstra.graph_size * sizeof(unsigned long));
-    dijkstra.queue = (struct queue_element **) malloc(dijkstra.graph_size * sizeof(struct queue_element *));
+    dijkstra.queue = (struct queue_node **) malloc(dijkstra.graph_size * sizeof(struct queue_node *));
     dijkstra.queue_position = (unsigned long *) calloc(dijkstra.graph_size, sizeof(unsigned long));
     dijkstra.result = (unsigned long *) malloc(dijkstra.graph_size * sizeof(unsigned long));
+    leaderboard.nil = (struct tree_node *) malloc(sizeof(struct tree_node));
+    leaderboard.nil->color = 'B';
+//    leaderboard.nil->parent = leaderboard.nil;
+//    leaderboard.nil->left = leaderboard.nil;
+//    leaderboard.nil->right = leaderboard.nil;
+    leaderboard.root = leaderboard.nil;
 }
 
 void parse_dimensions() {
@@ -426,7 +424,7 @@ void parse_dimensions() {
     if (fgets(input, 22, stdin) == NULL)
         printf("error");
     dijkstra.graph_size = strtoul(input, &pointer, 10);
-    ranking.size = strtoul(pointer, NULL, 10);
+    leaderboard.size = strtoul(pointer, NULL, 10);
     setup();
 }
 
@@ -457,28 +455,29 @@ int string_compare(char *a, char *b) {
 }
 
 void add_result() {
-    if (ranking.size_curr < ranking.size) {
-        insert(&ranking.root, dijkstra.id, dijkstra.length, NULL);
-        ranking.size_curr++;
-        set_max(&ranking.root);
-    } else if (dijkstra.length < ranking.max) {
-        remove_max(&ranking.max_position);
-        insert(&ranking.root, dijkstra.id, dijkstra.length, NULL);
-        set_max(&ranking.root);
+    if (leaderboard.size_curr < leaderboard.size) {
+        insert(&leaderboard.root, dijkstra.id, dijkstra.length, leaderboard.nil);
+        leaderboard.size_curr++;
+        if (dijkstra.length > leaderboard.max)
+            set_max(&leaderboard.root);
+    } else if (dijkstra.length < leaderboard.max) {
+        remove_max(leaderboard.max_position);
+        insert(&leaderboard.root, dijkstra.id, dijkstra.length, leaderboard.nil);
+        set_max(&leaderboard.root);
     }
 }
 
 void compute_dijkstra() {
     dijkstra.queue_size = 0;
     dijkstra.result[0] = 0;
-    queue_insert(new_queue_element(0, 0));
+    queue_insert(new_queue_node(0, 0));
     for (int i = 1; i < dijkstra.graph_size; i++) {
         dijkstra.result[i] = 4294967295;
-        queue_insert(new_queue_element(i, dijkstra.result[i]));
+        queue_insert(new_queue_node(i, dijkstra.result[i]));
     }
 
     while (dijkstra.queue_size != 0) {
-        struct queue_element *root = queue_extract_root();
+        struct queue_node *root = queue_extract_root();
         for (int i = 1; i < dijkstra.graph_size; i++) {
             unsigned long distance = *(dijkstra.adj_matrix + root->node * dijkstra.graph_size + i);
             if (distance != 0) {
@@ -510,8 +509,8 @@ int parse_command() {
         add_result();
         reset();
     } else if (string_compare(input, "TopK\n")) {
-        ranking.printed = 0;
-        print_top(ranking.root);
+        leaderboard.printed = 0;
+        print_top(leaderboard.root);
         printf("\n");
     }
     return 1;
