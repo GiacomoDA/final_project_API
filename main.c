@@ -305,8 +305,8 @@ void remove_max(struct tree_node *max) {
     pop(&max->stack);
     if (max->stack == NULL) {
         struct tree_node *temp = max;
-        struct tree_node *parent = max->parent;
-        struct tree_node *left_max = tree_max(&max->left);
+        struct tree_node *parent = temp->parent;
+        struct tree_node *left_max = tree_max(&temp->left);
         if (parent->length > left_max->length) {
             leaderboard.max = parent->length;
             leaderboard.max_position = parent;
@@ -374,14 +374,20 @@ void print_result() {
         printf("%lu:%lu ", i, dijkstra.result[i]);
 }
 
+void quick_print(unsigned long value) {
+    if (value / 10)
+        quick_print(value / 10);
+    putchar(value % 10 + '0');
+}
+
 void print_stack(struct stack_node *stack) {
     if (stack != NULL) {
         if (leaderboard.printed < leaderboard.size_curr) {
-            printf("%lu", stack->graph_id);
+            quick_print(stack->graph_id);
             leaderboard.printed++;
         }
         if (leaderboard.printed < leaderboard.size_curr)
-            printf(" ");
+            putchar(' ');
         print_stack(stack->next);
     }
 }
@@ -408,11 +414,19 @@ void setup() {
     dijkstra.result = (unsigned long *) malloc(dijkstra.graph_size * sizeof(unsigned long));
     leaderboard.nil = (struct tree_node *) malloc(sizeof(struct tree_node));
     leaderboard.nil->color = 'B';
-    leaderboard.nil->parent = NULL;
-    leaderboard.nil->left = NULL;
-    leaderboard.nil->right = NULL;
     leaderboard.nil->length = 0;
     leaderboard.root = leaderboard.nil;
+}
+
+unsigned long string_to_unsignedlong(char *string, char **final) {
+    unsigned long result = 0;
+    while (*string != ',' && *string != '\n' && *string != ' ') {
+        result = result * 10 + *string - '0';
+        string++;
+    }
+    if (final != NULL)
+        *final = string;
+    return result;
 }
 
 void parse_dimensions() {
@@ -420,8 +434,9 @@ void parse_dimensions() {
     char *pointer;
     if (fgets(input, 22, stdin) == NULL)
         printf("error");
-    dijkstra.graph_size = strtoul(input, &pointer, 10);
-    leaderboard.size = strtoul(pointer, NULL, 10);
+    dijkstra.graph_size = string_to_unsignedlong(input, &pointer);
+    pointer++;
+    leaderboard.size = string_to_unsignedlong(pointer, NULL);
     setup();
 }
 
@@ -435,7 +450,7 @@ void parse_matrix() {
         pointer = input;
         for (int j = 0; j < dijkstra.graph_size; j++) {
             cell = dijkstra.adj_matrix + dijkstra.graph_size * i + j;
-            *cell = strtoul(pointer, &pointer, 10);
+            *cell = string_to_unsignedlong(pointer, &pointer);
             pointer++;
         }
     }
@@ -505,7 +520,7 @@ int parse_command() {
     } else if (string_compare(input, "TopK\n")) {
         leaderboard.printed = 0;
         print_top(leaderboard.root);
-        printf("\n");
+        putchar('\n');
     }
     return 1;
 }
