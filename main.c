@@ -1,6 +1,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+// -----------   STRUCTS   -----------
+
 struct queue_node {
     unsigned long node;
     unsigned long cost;
@@ -43,7 +45,7 @@ struct {
 } leaderboard = {.max = 0,
                  .size_curr = 0};
 
-// -----------   QUEUE METHODS   -----------
+// -----------   QUEUE   -----------
 
 unsigned long queue_parent(unsigned long index) {
     return (index - 1) / 2;
@@ -164,12 +166,13 @@ struct tree_node * new_tree_node(unsigned long id, unsigned long length, struct 
     return temp;
 }
 
-struct tree_node * search(struct tree_node **tree, unsigned long length) {
-    if ((*tree) == leaderboard.nil)
+struct tree_node * tree_max(struct tree_node **tree) {
+    if (*tree == leaderboard.nil)
         return leaderboard.nil;
-    if ((*tree)->length == length)
+    if ((*tree)->right == leaderboard.nil) {
         return *tree;
-    return (*tree)->length > length ? search(&(*tree)->left, length) : search(&(*tree)->right, length);
+    }
+    else return tree_max(&(*tree)->right);
 }
 
 void left_rotate(struct tree_node *node) {
@@ -302,6 +305,15 @@ void remove_max(struct tree_node *max) {
     pop(&max->stack);
     if (max->stack == NULL) {
         struct tree_node *temp = max;
+        struct tree_node *parent = max->parent;
+        struct tree_node *left_max = tree_max(&max->left);
+        if (parent->length > left_max->length) {
+            leaderboard.max = parent->length;
+            leaderboard.max_position = parent;
+        } else {
+            leaderboard.max = left_max->length;
+            leaderboard.max_position = left_max;
+        }
         if (max->parent == leaderboard.nil) {
             if (max->left != leaderboard.nil) {
                 max->left->color = 'B';
@@ -314,25 +326,17 @@ void remove_max(struct tree_node *max) {
             if (max->color == 'B')
                 fix_deletion(max->left);
         }
-        leaderboard.max_position = max->left;
         free(temp);
     }
-}
-
-void set_max(struct tree_node **tree) {
-    if (*tree == leaderboard.nil)
-        return;
-    if ((*tree)->right == leaderboard.nil) {
-        leaderboard.max = (*tree)->length;
-        leaderboard.max_position = *tree;
-        return;
-    }
-    else set_max(&(*tree)->right);
 }
 
 void insert(struct tree_node **tree, unsigned long id, unsigned long length, struct tree_node *parent) {
     if (*tree == leaderboard.nil) {
         *tree = new_tree_node(id, length, parent);
+        if (length > leaderboard.max) {
+            leaderboard.max = length;
+            leaderboard.max_position = *tree;
+        }
         fix_insertion(*tree);
         return;
     }
@@ -380,14 +384,6 @@ void print_stack(struct stack_node *stack) {
             printf(" ");
         print_stack(stack->next);
     }
-
-//    if (stack == NULL)
-//        return;
-//    while (stack->next != NULL) {
-//        printf("%lu ", stack->graph_id);
-//        stack = stack->next;
-//    }
-//    printf("%lu", stack->graph_id);
 }
 
 void print_top(struct tree_node *tree) {
@@ -412,9 +408,10 @@ void setup() {
     dijkstra.result = (unsigned long *) malloc(dijkstra.graph_size * sizeof(unsigned long));
     leaderboard.nil = (struct tree_node *) malloc(sizeof(struct tree_node));
     leaderboard.nil->color = 'B';
-//    leaderboard.nil->parent = leaderboard.nil;
-//    leaderboard.nil->left = leaderboard.nil;
-//    leaderboard.nil->right = leaderboard.nil;
+    leaderboard.nil->parent = NULL;
+    leaderboard.nil->left = NULL;
+    leaderboard.nil->right = NULL;
+    leaderboard.nil->length = 0;
     leaderboard.root = leaderboard.nil;
 }
 
@@ -458,12 +455,9 @@ void add_result() {
     if (leaderboard.size_curr < leaderboard.size) {
         insert(&leaderboard.root, dijkstra.id, dijkstra.length, leaderboard.nil);
         leaderboard.size_curr++;
-        if (dijkstra.length > leaderboard.max)
-            set_max(&leaderboard.root);
     } else if (dijkstra.length < leaderboard.max) {
         remove_max(leaderboard.max_position);
         insert(&leaderboard.root, dijkstra.id, dijkstra.length, leaderboard.nil);
-        set_max(&leaderboard.root);
     }
 }
 
