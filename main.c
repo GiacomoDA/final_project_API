@@ -116,7 +116,7 @@ void queue_heapify(unsigned long index) {
 
 struct queue_node * queue_extract_root() {
     if (dijkstra.queue_size == 0) {
-        printf("ERROR: QUEUE IS EMPTY");
+        printf("error");
         return NULL;
     }
 
@@ -166,13 +166,13 @@ struct tree_node * new_tree_node(unsigned long id, unsigned long length, struct 
     return temp;
 }
 
-struct tree_node * tree_max(struct tree_node **tree) {
-    if (*tree == leaderboard.nil)
+struct tree_node * tree_max(struct tree_node *tree) {
+    if (tree == leaderboard.nil)
         return leaderboard.nil;
-    if ((*tree)->right == leaderboard.nil) {
-        return *tree;
+    if (tree->right == leaderboard.nil) {
+        return tree;
     }
-    else return tree_max(&(*tree)->right);
+    else return tree_max(tree->right);
 }
 
 void left_rotate(struct tree_node *node) {
@@ -304,15 +304,14 @@ void fix_deletion(struct tree_node *node) {
 void remove_max(struct tree_node *max) {
     pop(&max->stack);
     if (max->stack == NULL) {
-        struct tree_node *temp = max;
-        struct tree_node *parent = temp->parent;
-        struct tree_node *left_max = tree_max(&temp->left);
-        if (parent->length > left_max->length) {
-            leaderboard.max = parent->length;
-            leaderboard.max_position = parent;
-        } else {
+        struct tree_node *parent = max->parent;
+        struct tree_node *left_max = tree_max(max->left);
+        if (left_max->length > parent->length) {
             leaderboard.max = left_max->length;
             leaderboard.max_position = left_max;
+        } else {
+            leaderboard.max = parent->length;
+            leaderboard.max_position = parent;
         }
         if (max->parent == leaderboard.nil) {
             if (max->left != leaderboard.nil) {
@@ -326,7 +325,7 @@ void remove_max(struct tree_node *max) {
             if (max->color == 'B')
                 fix_deletion(max->left);
         }
-        free(temp);
+        free(max);
     }
 }
 
@@ -348,7 +347,7 @@ void insert(struct tree_node **tree, unsigned long id, unsigned long length, str
     else push(&(*tree)->stack, id);
 }
 
-// -----------   PRINTERS   -----------
+// -----------   DEBUGGING   -----------
 
 void queue_print() {
     for (unsigned long i = 0; i < dijkstra.queue_size; i++)
@@ -374,10 +373,13 @@ void print_result() {
         printf("%lu:%lu ", i, dijkstra.result[i]);
 }
 
+// -----------   PRINTERS   -----------
+
+
 void quick_print(unsigned long value) {
     if (value / 10)
         quick_print(value / 10);
-    putchar(value % 10 + '0');
+    putchar((int) value % 10 + '0');
 }
 
 void print_stack(struct stack_node *stack) {
@@ -400,12 +402,7 @@ void print_top(struct tree_node *tree) {
     }
 }
 
-// -----------   OTHERS   -----------
-
-void reset() {
-    dijkstra.length = 0;
-    dijkstra.id++;
-}
+// -----------   MISC   -----------
 
 void setup() {
     dijkstra.adj_matrix = (unsigned long *) malloc(dijkstra.graph_size * dijkstra.graph_size * sizeof(unsigned long));
@@ -441,11 +438,11 @@ void parse_dimensions() {
 }
 
 void parse_matrix() {
-    char input[20000];
+    char input[10000];
     char *pointer;
     unsigned long *cell;
     for (int i = 0; i < dijkstra.graph_size; i++) {
-        if (fgets(input, 20000, stdin) == NULL)
+        if (fgets(input, 10000, stdin) == NULL)
             printf("error");
         pointer = input;
         for (int j = 0; j < dijkstra.graph_size; j++) {
@@ -454,16 +451,6 @@ void parse_matrix() {
             pointer++;
         }
     }
-}
-
-int string_compare(char *a, char *b) {
-    while(*a == *b) {
-        if (*a == 0 && *b == 0)
-            return 1;
-        a++;
-        b++;
-    }
-    return 0;
 }
 
 void add_result() {
@@ -507,6 +494,16 @@ void compute_dijkstra() {
     }
 }
 
+int string_compare(char *a, char *b) {
+    while(*a == *b) {
+        if (*a == 0 && *b == 0)
+            return 1;
+        a++;
+        b++;
+    }
+    return 0;
+}
+
 int parse_command() {
     char input[15];
     if (fgets(input, 15, stdin) == NULL) {
@@ -516,7 +513,8 @@ int parse_command() {
         parse_matrix();
         compute_dijkstra();
         add_result();
-        reset();
+        dijkstra.length = 0;
+        dijkstra.id++;
     } else if (string_compare(input, "TopK\n")) {
         leaderboard.printed = 0;
         print_top(leaderboard.root);
